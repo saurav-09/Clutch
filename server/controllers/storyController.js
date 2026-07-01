@@ -1,5 +1,5 @@
 // controllers/storyController.js
-import imagekit from "../configs/imageKit.js";
+import imagekit from "../configs/imagekit.js";
 import Story from "../models/story.js";
 import User from "../models/user.js";
 import { inngest } from "../inngest/index.js";
