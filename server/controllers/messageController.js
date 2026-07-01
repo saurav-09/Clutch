@@ -108,3 +108,72 @@ export const getUserRecentMessages = async (req, res) => {
   }
 };
 
+
+// Edit message
+export const editMessage = async (req, res) => {
+  try {
+    const { userId } = req.auth();
+    const { id } = req.params;
+    const { text } = req.body;
+
+    const message = await Message.findById(id);
+    if (!message) return res.status(404).json({ success: false, message: "Message not found" });
+    if (String(message.from_user_id) !== String(userId)) return res.status(403).json({ success: false, message: "Not allowed" });
+
+    message.text = text;
+    message.isEdited = true;
+    await message.save();
+
+    if (connections[message.to_user_id]) {
+      connections[message.to_user_id].write(`data: ${JSON.stringify({ type: "EDIT", message })}\n\n`);
+    }
+
+    res.json({ success: true, message });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// Delete message for me
+export const deleteForMe = async (req, res) => {
+  try {
+    const { userId } = req.auth();
+    const { id } = req.params;
+
+    const message = await Message.findById(id);
+    if (!message) return res.status(404).json({ success: false, message: "Message not found" });
+
+    message.hiddenFor = message.hiddenFor || [];
+    if (!message.hiddenFor.includes(userId)) message.hiddenFor.push(userId);
+    await message.save();
+
+    res.json({ success: true, id, scope: "me" });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// Delete message for everyone
+export const deleteForEveryone = async (req, res) => {
+  try {
+    const { userId } = req.auth();
+    const { id } = req.params;
+
+    const message = await Message.findById(id);
+    if (!message) return res.status(404).json({ success: false, message: "Message not found" });
+    if (String(message.from_user_id) !== String(userId)) return res.status(403).json({ success: false, message: "Not allowed" });
+
+    await Message.findByIdAndDelete(id);
+
+    if (connections[message.to_user_id]) {
+      connections[message.to_user_id].write(`data: ${JSON.stringify({ type: "DELETE", id })}\n\n`);
+    }
+
+    res.json({ success: true, id, scope: "everyone" });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};

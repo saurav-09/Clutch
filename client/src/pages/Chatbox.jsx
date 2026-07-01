@@ -1,36 +1,160 @@
-import React from 'react'
-import {dummyMessagesData, dummyUserData} from '../assets/assets'
+// src/pages/ChatBox.jsx
+import React, { useEffect, useRef, useState } from "react";
 import { ImageIcon, SendHorizonal } from "lucide-react";
+import { useDispatch, useSelector } from "react-redux";
+import { useParams } from "react-router-dom";
+import { useAuth } from "@clerk/react";
+import toast from "react-hot-toast";
+import api from "../api/axios";
+import {
+  addMessage,
+  fetchMessages,
+  resetMessages,
+  deleteMessage,  // ⬅️ for deleting
+  updateMessage,  // ⬅️ for editing
+} from "../features/messages/messageSlice";
+import MessageItem from "../components/MessageItem";
 
-import { useState } from 'react';
-import { useRef } from 'react';
-import { useEffect } from 'react';
-const Chatbox = () => {
+const ChatBox = () => {
+  const { messages } = useSelector((state) => state.messages);
+  const connections = useSelector((state) => state.connections.connections);
 
-  const messages = dummyMessagesData;
-  const [text , setText] = useState('');
-  // const[image, setImage] = useState('');
- const [media, setMedia] = useState(null);
-  
-  const [user, setUser] = useState(dummyUserData);
-  const messagesEndRef = useRef(null);
+  const { userId: clerkUserId, getToken } = useAuth(); // ✅ logged-in user
+  const { userId: peerId } = useParams(); // ✅ peer user
+  const dispatch = useDispatch();
 
+  const [text, setText] = useState("");
+  const [user, setUser] = useState(null); 
+  const [media, setMedia] = useState(null);
+  const containerRef = useRef(null); // 👈 your containerRef
+
+  const MAX_FILE_SIZE_MB = 25;
+
+  // Delete for me
+  const handleDeleteForMe = async (id) => {
+    try {
+      const token = await getToken();
+      const { data } = await api.delete(`/api/message/${id}/me`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (data.success) dispatch(deleteMessage(id));
+    } catch (err) {
+      toast.error(err.message);
+    }
+  };
+
+  // Delete for everyone
+  const handleDeleteForEveryone = async (id) => {
+    try {
+      const token = await getToken();
+      const { data } = await api.delete(`/api/message/${id}/everyone`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (data.success) dispatch(deleteMessage(id));
+    } catch (err) {
+      toast.error(err.message);
+    }
+  };
+
+  // Edit message
+  const handleEdit = async (msg) => {
+    const newText = prompt("Edit your message:", msg.content);
+    if (!newText || !newText.trim()) return;
+    try {
+      const token = await getToken();
+      const { data } = await api.put(
+        `/api/message/${msg.id}/edit`,
+        { text: newText },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (data.success) dispatch(updateMessage(data.message));
+    } catch (err) {
+      toast.error(err.message);
+    }
+  };
+
+  // File select
+  const handleFileSelect = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
+      toast.error(`File size cannot exceed ${MAX_FILE_SIZE_MB} MB.`);
+      setMedia(null);
+      return;
+    }
+    if (!file.type.startsWith("image") && !file.type.startsWith("video")) {
+      toast.error("Only image and video files are allowed.");
+      setMedia(null);
+      return;
+    }
+    setMedia(file);
+  };
+
+  // Fetch messages
+  const fetchUserMessages = async () => {
+    try {
+      const token = await getToken();
+      dispatch(fetchMessages({ token, userId: peerId }));
+    } catch (error) {
+      toast.error(error.message);
+    }
+  };
+
+  // Send message
   const sendMessage = async () => {
+    try {
+      if (!text && !media) return;
 
-  }
+      const token = await getToken();
+      const formData = new FormData();
+      formData.append("to_user_id", peerId);
+      formData.append("text", text);
+      if (media) formData.append("media", media);
 
-  const handleFileSelect = async () =>{
+      const { data } = await api.post("/api/message/send", formData, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
 
-  }
+      if (data.success) {
+        setText("");
+        setMedia(null);
+        dispatch(addMessage(data.message));
+      } else {
+        throw new Error(data.message);
+      }
+    } catch (error) {
+      toast.error(error.message);
+    }
+  };
 
-  useEffect(()=>{
-    messagesEndRef.current?.scrollIntoView({behavior: "smooth"})
-  }, [messages])
+  // On mount → fetch messages
+  useEffect(() => {
+    fetchUserMessages();
+    return () => {
+      dispatch(resetMessages());
+    };
+  }, [peerId]);
 
+  // Find peer user
+  useEffect(() => {
+    if (connections.length > 0) {
+      const peer = connections.find((c) => c._id === peerId);
+      setUser(peer);
+    }
+  }, [connections, peerId]);
 
+  // Auto-scroll when messages change
+  useEffect(() => {
+    if (containerRef.current) {
+      containerRef.current.scrollTo({
+        top: containerRef.current.scrollHeight,
+        behavior: "smooth",
+      });
+    }
+  }, [messages]);
 
   return (
-     user && (
+    user && (
       <div className="flex flex-col h-screen">
         {/* Header */}
         <div className="flex items-center gap-2 p-2 md:px-10 xl:pl-42 bg-gradient-to-r from-indigo-50 to-purple-50 border-b border-gray-300">
@@ -47,21 +171,27 @@ const Chatbox = () => {
 
         {/* Messages container */}
         <div
-          ref={messagesEndRef} // 👈 containerRef applied
+          ref={containerRef} // 👈 containerRef applied
           className="p-5 md:px-10 h-full overflow-y-scroll"
         >
           <div className="space-y-4 max-w-4xl mx-auto">
             {messages
               .toSorted((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
-              .map((message, index) => (
-               <div key={index} className= {`flex flex-col ${message.to_user_id !== user._id ? 'items-start' : 'items-end'}`} >
-                <div className= {`p-2 text-sm max-w-sm bg-white text-slate-700 rounded-lg shadow ${message.to_user_id !== user._id ? 'rounded-bl-none' : 'rounded-br-none'}`}>
-                  {message.message_type === 'image' && < img src = {message.media_url} className='w-full max-w-sm rounded-lg mb-1'/>}
-                  <p>{message.text}</p>
-                  </div>
-                  </div>
+              .map((message) => (
+                <MessageItem
+                  key={message._id}
+                  message={{
+                    id: message._id,
+                    type: message.message_type, 
+                    content: message.text || message.media_url,
+                    senderId: message.from_user_id,
+                  }}
+                  currentUser={{ id: clerkUserId }}
+                  onEdit={handleEdit}
+                  onDeleteForMe={handleDeleteForMe}
+                  onDeleteForEveryone={handleDeleteForEveryone}
+                />
               ))}
-              <div ref= {messagesEndRef}/>
           </div>
         </div>
 
@@ -119,7 +249,7 @@ const Chatbox = () => {
         </div>
       </div>
     )
-  )
-}
+  );
+};
 
-export default Chatbox
+export default ChatBox;

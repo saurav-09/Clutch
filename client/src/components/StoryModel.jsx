@@ -1,9 +1,8 @@
-import { TextIcon, Upload } from "lucide-react";
-import { Sparkle } from "lucide-react";
-import { ArrowLeft } from "lucide-react";
-import React from "react";
-import { useState } from "react";
+import { ArrowLeft, Sparkle, TextIcon, Upload } from "lucide-react";
+import React, { useState } from "react";
 import { toast } from "react-hot-toast";
+import api from "../api/axios";
+import { useAuth } from "@clerk/react";
 
 const StoryModel = ({ setShowModel, fetchStories }) => {
   const bgColors = [
@@ -20,19 +19,78 @@ const StoryModel = ({ setShowModel, fetchStories }) => {
   const [media, setMedia] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
 
+  
+  const { getToken } = useAuth();
+
+  const MAX_VIDEO_DURATION = 60; // seconds
+  const MAX_VIDEO_SIZE_MB = 50; // in mb
+
   const handleMediaUpload = (e) => {
     const file = e.target.files?.[0];
+    if (!file) return;
 
-    if (file) {
+    if (file.type.startsWith("video")) {
+      if (file.size > MAX_VIDEO_SIZE_MB * 1024 * 1024) {
+        toast.error(`Video file size cannot exceed ${MAX_VIDEO_SIZE_MB}MB.`);
+        return;
+      }
+
+      const video = document.createElement("video");
+      video.src = URL.createObjectURL(file);
+      video.preload = "metadata";
+      video.onloadedmetadata = () => {
+        URL.revokeObjectURL(video.src);
+        if (video.duration > MAX_VIDEO_DURATION) {
+          toast.error(`Video duration cannot exceed ${MAX_VIDEO_DURATION} seconds`);
+        } else {
+          setMedia(file);
+          setPreviewUrl(URL.createObjectURL(file));
+          setMode("media");
+          setText(" ");
+        }
+      };
+    } else if (file.type.startsWith("image")) {
       setMedia(file);
-      setMode("media");
       setPreviewUrl(URL.createObjectURL(file));
+      setMode("media");
+      setText(" ");
     }
   };
 
-  const handleCreateStory = async (params) => {
-    
-  }
+  const handleCreateStory = async () => {
+    const media_type =
+      mode === "media"
+        ? media?.type.startsWith("image")
+          ? "image"
+          : "video"
+        : "text";
+
+    if (media_type === "text" && !text.trim()) {
+      return toast.error("Please enter some text.");
+    }
+
+    const formData = new FormData();
+    formData.append("content", text);
+    formData.append("media_type", media_type);
+    formData.append("background_color", background);
+    if (media) formData.append("media", media);
+
+    const token = await getToken();
+    try {
+      const { data } = await api.post(`/api/story/create`, formData, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (data.success) {
+        setShowModel(false);
+        toast.success("Story created successfully");
+        fetchStories();
+      } else {
+        toast.error(data.message);
+      }
+    } catch (error) {
+      toast.error(error.message);
+    }
+  };
 
   return (
      <div className="fixed inset-0 z-50 min-h-screen bg-black/80 backdrop-blur text-white flex items-center justify-center p-4">

@@ -1,8 +1,8 @@
 import express from "express";
 import {
-//   deleteForEveryone,
-//   deleteForMe,
-//   editMessage,
+  deleteForEveryone,
+  deleteForMe,
+  editMessage,
   getChatMessages,
   sendMessage,
   sseController,
@@ -15,10 +15,9 @@ const messageRouter = express.Router();
 messageRouter.get("/:userId", sseController);
 messageRouter.post("/send", upload.single("media"), protect, sendMessage);
 messageRouter.post("/get", protect, getChatMessages);
-// messageRouter.put("/:id/edit", protect, editMessage);      // fixed
-// // messageRouter.js
-// messageRouter.delete("/:id/me", protect, deleteForMe);
-// messageRouter.delete("/:id/everyone", protect, deleteForEveryone);
+messageRouter.put("/:id/edit", protect, editMessage);    
+messageRouter.delete("/:id/me", protect, deleteForMe);
+messageRouter.delete("/:id/everyone", protect, deleteForEveryone);
 
 
 export default messageRouter;

@@ -3,7 +3,6 @@ import Post from "../models/post.js";
 import Connection from "../models/connection.js";
 import imagekit from "../configs/imagekit.js";
 import { inngest } from "../inngest/index.js";
-import fs from "fs";
 import { userInfo } from "os";
 
 // get user data
@@ -51,13 +50,9 @@ export const updateUserData = async (req, res) => {
 
     // Profile Picture Upload Logic
     if (profile) {
-      const buffer = fs.readFileSync(profile.path); // Read file into buffer
-      console.log(profile);
-
-      // Upload to ImageKit
       const response = await imagekit.files.upload({
-        file: buffer.toString("base64"),
-        fileName: profile.originalname, // keep original name
+        file: profile.buffer.toString("base64"),
+        fileName: profile.originalname,
       });
 
       // Save in updatedUser object
@@ -66,10 +61,8 @@ export const updateUserData = async (req, res) => {
 
     // Cover Photo Upload Logic
     if (cover) {
-      const buffer = fs.readFileSync(cover.path);
-
       const response = await imagekit.files.upload({
-        file: buffer.toString("base64"),
+        file: cover.buffer.toString("base64"),
         fileName: cover.originalname,
       });
 
@@ -235,10 +228,10 @@ export const sendConnectionRequest = async (req, res) => {
         from_user_id: userId,
         to_user_id: id,
       });
-        await inngest.send({
-          name:"app/connection-request",
-      data:{connectionId:newConnection._id},
-        })
+      await inngest.send({
+        name: "app/connection-request",
+        data: { connectionId: newConnection._id },
+      });
       return res.json({
         success: true,
         message: "Connection request sent successfully",

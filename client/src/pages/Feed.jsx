@@ -1,24 +1,45 @@
 import React, { useEffect, useState } from 'react'
 import { dummyPostsData } from '../assets/assets'
 import Loading from '../components/Loading'
-import  Storiesbar  from '../components/Storiesbar'
+import  Storiesbar  from '../components/StoriesBar'
 import PostCard from '../components/PostCard'
 import { assets } from '../assets/assets'
 import RecentMessages from '../components/RecentMessages'
+import { useAuth } from "@clerk/react";
+import api from '../api/axios'
 
 
 const feed = () => {
+    const { getToken } = useAuth();
+
 const [feeds, setFeeds]= useState([])
 const [loading, setLoading]= useState(true)
 
-const fetchFeeds = async() => {
-  setFeeds(dummyPostsData)
-  setLoading(false)
-}
+  const fetchFeeds = async () => {
+    try {
+      const token = await getToken();
+      setLoading(true);
 
-useEffect(()=>{
-  fetchFeeds()
-}, []);
+      const { data } = await api.get("/api/post/feed", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (data.success) {
+        setFeeds(data.posts);
+      } else {
+        toast.error(data.message);
+      }
+    } catch (error) {
+      toast.error(error.message);
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    fetchFeeds();
+  }, []);
 
   return !loading ?(
     <div className="h-full overflow-y-scroll no-scrollbar py-10 xl:pr-5 flex items-start justify-center xl:gap-8">
